@@ -208,12 +208,12 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
 
 
 
-def fitness_function(schedule):
+def fitness_function(schedule, remaining_hours):
     penalty = 0
 
     # Жорсткі обмеження
     
-    # Перевірка на конфлікти по викладачах
+    # 1. Перевірка на конфлікти по викладачах
     lecturer_slots = {}
     for day in range(DAYS_PER_WEEK):
         for slot in range(SLOTS_PER_DAY):
@@ -224,7 +224,7 @@ def fitness_function(schedule):
                 else:
                     lecturer_slots.setdefault(lecturer, []).append((day, slot))
 
-    # Перевірка на конфлікти по групах
+    # 2. Перевірка на конфлікти по групах
     group_slots = {}
     for day in range(DAYS_PER_WEEK):
         for slot in range(SLOTS_PER_DAY):
@@ -235,7 +235,7 @@ def fitness_function(schedule):
                 else:
                     group_slots.setdefault(group, []).append((day, slot))
 
-    # Перевірка на конфлікти по аудиторіях
+    # 3. Перевірка на конфлікти по аудиторіях
     room_slots = {}
     for day in range(DAYS_PER_WEEK):
         for slot in range(SLOTS_PER_DAY):
@@ -248,7 +248,7 @@ def fitness_function(schedule):
 
     # М'які обмеження
     
-    # Мінімізація "вікон" для груп
+    # 4. Мінімізація "вікон" для груп
     for group, slots in group_slots.items():
         slots.sort()
         for i in range(1, len(slots)):
@@ -257,20 +257,28 @@ def fitness_function(schedule):
             if curr_day == prev_day and curr_slot != prev_slot + 1:
                 penalty += 10  # Штраф за "вікно" в розкладі групи
 
-    # Перевірка відповідності аудиторії розміру групи
+    # 5. Перевірка відповідності аудиторії розміру групи
     for day in range(DAYS_PER_WEEK):
         for slot in range(SLOTS_PER_DAY):
             for entry in schedule[slot][day]:
-                room_capacity = rooms[entry['Room']]['Capacity']
-                group_size = groups[entry['Group']]['Size']
+                room_name = entry['Room']
+                room = next((r for r in rooms if r['Room'] == room_name), None)
+                room_capacity = room['Capacity']
+                group_size = entry['NumOfStudents']
                 if group_size > room_capacity:
                     penalty += 5  # Штраф за невідповідність розміру аудиторії
 
+    # 6. Перевірка залишкових годин
+    for (group, subject, class_type), remaining in remaining_hours.items():
+        if abs(remaining) > 0:
+            penalty += abs(remaining) * 2  # Штраф за незаповнені години
+
     return penalty
+
 
 def select_parent(population, fitness_scores):
     """
-    Виконує вибір батьків за методом рулетки.
+    Виконує вибір батьків за методом рулетки з урахуванням залишкових годин для кожного індивіда.
     
     Parameters:
     - population: список індивідів поточної популяції (розкладів).
@@ -290,6 +298,7 @@ def select_parent(population, fitness_scores):
     chosen_index = random.choices(range(len(population)), weights=probabilities, k=1)[0]
     
     return population[chosen_index]
+
 
 def crossover(parent1, parent2):
     """
@@ -368,41 +377,62 @@ def mutate(schedule, mutation_rate=0.1):
 
 
 def genetic_algorithm_schedule(population_size, generations):
-    # Ініціалізуємо популяцію
+    # Ініціалізуємо популяцію, де кожен індивід містить розклад та залишкові години
     population = [initialize_schedule(groups, subjects, lecturers, rooms) for _ in range(population_size)]
     
     for generation in range(generations):
         # Оцінка фітнесу для кожного індивіда
-        fitness_scores = [(schedule, fitness_function(schedule)) for schedule in population]
+        fitness_scores = []
+        for schedule, remaining_hours in population:
+            fitness_score = fitness_function(schedule, remaining_hours)  # Оцінка фітнесу
+            fitness_scores.append(((schedule, remaining_hours), fitness_score))
         
         # Сортуємо за фітнесом, найкращі мають мінімальні значення (менші штрафи)
         fitness_scores.sort(key=lambda x: x[1])
+        
+        # Оновлюємо популяцію, залишаючи тільки розклади
         population = [x[0] for x in fitness_scores]
         
         # Перевірка умови зупинки
-        if fitness_scores[0][1] == 0:  # або інша умова
+        if fitness_scores[0][1] == 0:  # Якщо фітнес без штрафів (ідеальне рішення)
             print(f"Solution found at generation {generation}")
-            return population[0]
+            best_schedule, _ = fitness_scores[0][0]
+            print_schedule(best_schedule)
+            return best_schedule
         
         # Відбір батьків і формування нового покоління
         new_population = []
         elite_count = int(0.1 * population_size)  # Елітарність: 10%
         new_population.extend(population[:elite_count])
+
+        _population = []
+        _score = []
+        for p, s in fitness_scores:
+            _population.append(p)
+            _score.append(s)
         
         while len(new_population) < population_size:
-            parent1 = select_parent(population)
-            parent2 = select_parent(population)
+            parent1 = select_parent([schedule for schedule, _ in _population], _score)
+            parent2 = select_parent([schedule for schedule, _ in _population], _score)
+            
+            # Створюємо нащадків, передаючи і schedule, і remaining_hours
             child1, child2 = crossover(parent1, parent2)
+            
+            # Мутація, яка змінює і schedule, і remaining_hours
             child1 = mutate(child1)
             child2 = mutate(child2)
+            
+            # Додаємо нових нащадків до нової популяції
             new_population.extend([child1, child2])
         
+        # Оновлюємо популяцію, обрізаємо зайві елементи
         population = new_population[:population_size]
     
     # Повертаємо найкращий розклад після завершення всіх поколінь
-    best_schedule = population[0]
+    best_schedule, _ = population[0]  # Беремо розклад з найменшим фітнесом
     print_schedule(best_schedule)
     return best_schedule
+
 
 
 
