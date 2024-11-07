@@ -144,7 +144,7 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
                     num_of_stud = num_of_stud if num_of_stud.is_integer() else num_of_stud + (0.5 if i else -0.5)
                     tasks.append((sub_group, subject["Subject"], "Lab", num_of_stud))
 
-    #random.shuffle(tasks)
+    random.shuffle(tasks)
     room_occupancy = [[[] for _ in range(DAYS_PER_WEEK)] for _ in range(SLOTS_PER_DAY)]
     lecturer_occupancy = [[set() for _ in range(DAYS_PER_WEEK)] for _ in range(SLOTS_PER_DAY)]
     group_occupancy = [[set() for _ in range(DAYS_PER_WEEK)] for _ in range(SLOTS_PER_DAY)]
@@ -154,6 +154,9 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
         time = slot // DAYS_PER_WEEK
         available_rooms = rooms.copy()
         available_lecturers = set(lecturers.keys())
+
+        # Використовуємо новий список для незавершених task-ів
+        remaining_tasks = []
         
         while tasks and available_rooms and available_lecturers:
             group, subject, class_type, num_of_stud = tasks.pop()
@@ -161,19 +164,18 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
             lecturer = random.choice(list(available_lecturers))
 
             # Перевірка обмежень
-            if subject in lecturers[lecturer] and class_type in lecturers[lecturer][subject]:
+            if (
+                subject in lecturers[lecturer] and 
+                class_type in lecturers[lecturer][subject] and
+
                 # Обмеження 1: Лектор не може викладати в різних аудиторіях одночасно
-                if lecturer in lecturer_occupancy[time][day]:
-                    continue
-
+                lecturer not in lecturer_occupancy[time][day] and
                 # Обмеження 2: Група не може мати більше одного заняття в один час
-                if group in group_occupancy[time][day]:
-                    continue
-
+                group not in group_occupancy[time][day] and
                 # Обмеження 3: Аудиторія може використовуватися одночасно лише для одного заняття (крім лекцій для кількох груп)
-                if any(entry["Room"] == room for entry in room_occupancy[time][day]) and (
-                    class_type == "Lab" or room_occupancy[time][day]["Type"] == "Lab"):
-                    continue
+                not (any(entry["Room"] == room for entry in room_occupancy[time][day]) and (
+                    class_type == "Lab" or room_occupancy[time][day]["Type"] == "Lab"))
+            ):
 
                 # Додаємо заняття до розкладу
                 schedule[time][day].append({
@@ -194,8 +196,14 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
                 group_occupancy[time][day].add(group)
                 
                 available_lecturers.remove(lecturer)
+            else:
+                # Якщо додати не можна, зберігаємо task у новому списку
+                remaining_tasks.append((group, subject, class_type, num_of_stud))
+            
+        # Повертаємо незавершені task-и назад у tasks для подальшої обробки
+        tasks.extend(remaining_tasks)
 
-    print_schedule(schedule)
+    #print_schedule(schedule)
     return schedule, remaining_hours
 
 
