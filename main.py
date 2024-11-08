@@ -433,9 +433,10 @@ def genetic_algorithm_schedule(population_size, generations):
         
         # Сортуємо за фітнесом, найкращі мають мінімальні значення (менші штрафи)
         fitness_scores.sort(key=lambda x: x[1])
+        fitness_scores = fitness_scores[:population_size]
         
         # Оновлюємо популяцію, залишаючи тільки розклади
-        population = [x[0] for x in fitness_scores[:population_size]]
+        population = [x[0] for x in fitness_scores]
         
         # Перевірка умови зупинки
         if fitness_scores[0][1] == 0:  # Якщо фітнес без штрафів (ідеальне рішення)
