@@ -180,7 +180,7 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
                 # Обмеження 1: Лектор не може викладати в різних аудиторіях одночасно
                 lecturer not in lecturer_occupancy[time][day] and
                 # Обмеження 2: Група не може мати більше одного заняття в один час
-                group not in group_occupancy[time][day] and
+                group.split('.')[0] not in group_occupancy[time][day] and
                 # Обмеження 3: Аудиторія може використовуватися одночасно лише для одного заняття (крім лекцій для кількох груп)
                 not (any(entry["Room"] == room for entry in room_occupancy[time][day]) and (
                     class_type == "Lab" or room_occupancy[time][day]["Type"] == "Lab"))
@@ -240,7 +240,7 @@ def fitness_function(schedule, remaining_hours):
     for day in range(DAYS_PER_WEEK):
         for slot in range(SLOTS_PER_DAY):
             for entry in schedule[slot][day]:
-                group = entry['Group']
+                group = entry['Group'].split('.')[0]
                 if (day, slot) in group_slots.get(group, []):
                     penalty += 100  # Штраф за конфлікт у групи
                 else:
