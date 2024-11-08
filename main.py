@@ -474,7 +474,7 @@ def genetic_algorithm_schedule(population_size, generations):
     
     # Повертаємо найкращий розклад після завершення всіх поколінь
     best_schedule, _ = population[0]  # Беремо розклад з найменшим фітнесом
-    print_schedule(best_schedule)
+    #print_schedule(best_schedule)
     return best_schedule
 
 
@@ -485,5 +485,5 @@ subjects = load_subjects()
 lecturers = load_lecturers()
 rooms = load_rooms()
 
-print_schedule(genetic_algorithm_schedule(50, 100))
+print_schedule(genetic_algorithm_schedule(100, 1000))
 # print_entity_schedule(initialize_schedule(groups, subjects, lecturers, rooms), "G1", "Group")
