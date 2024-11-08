@@ -344,25 +344,34 @@ def mutate(schedule, mutation_rate=0.1):
             if random.random() < mutation_rate:
                 # Отримуємо випадковий вибір для зміни параметра заняття
                 current_entry = mutated_schedule[day][slot]
+                if current_entry == []:
+                    continue
                 
                 # Вибираємо тип зміни: змінити предмет, викладача, аудиторію або час
-                mutation_choice = random.choice(["subject", "lecturer", "room", "time"])
+                mutation_choice = "time" #random.choice(["subject", "lecturer", "room", "time"])
+                random_index = random.randint(0, len(current_entry)-1)
                 
                 if mutation_choice == "subject":
                     # Змінити предмет на інший випадковий із переліку доступних предметів
-                    current_entry["Subject"] = random.choice(list(subjects.keys()))
+                    # Збираємо всі предмети зі структури `subjects`
+                    all_subjects = set()
+                    for group_subjects in subjects.values():
+                        for entry in group_subjects:
+                            all_subjects.add(entry["Subject"])
+
+                    current_entry[random_index]["Subject"] = random.choice(list(all_subjects))
                 
                 elif mutation_choice == "lecturer":
                     # Змінити викладача на іншого, який може викладати цей предмет
                     possible_lecturers = [lect for lect, details in lecturers.items() 
-                                          if current_entry["Subject"] in details["Subjects"]]
-                    current_entry["Lecturer"] = random.choice(possible_lecturers)
+                                          if current_entry[random_index]["Subject"] in details.keys()]
+                    current_entry[random_index]["Lecturer"] = random.choice(possible_lecturers)
                 
                 elif mutation_choice == "room":
                     # Змінити аудиторію на іншу, яка може вмістити групу
-                    group_size = groups[current_entry["Group"]]
-                    possible_rooms = [room for room, capacity in rooms.items() if capacity >= group_size]
-                    current_entry["Room"] = random.choice(possible_rooms)
+                    group_size = current_entry[random_index]["NumOfStudents"]
+                    possible_rooms = [room['Room'] for room in rooms if room['Capacity'] >= group_size]
+                    current_entry[random_index]["Room"] = random.choice(possible_rooms)
                 
                 elif mutation_choice == "time":
                     # Перемістити заняття на інший слот у той же день або інший день
@@ -374,6 +383,41 @@ def mutate(schedule, mutation_rate=0.1):
                     mutated_schedule[new_day][new_slot], mutated_schedule[day][slot]
     
     return mutated_schedule
+
+def calculate_remaining_hours(schedule):
+    """ Обчислює надмірні години для кожного предмета на основі розкладу."""
+    
+    remaining_hours = {}
+    
+    for group, subject_list in subjects.items():
+        for subject_info in subject_list:
+            subject = subject_info['Subject']
+            lecture_hours = subject_info['LectureHours']
+            lab_hours = subject_info['LabHours']
+            
+            # Ініціалізація для лекційного заняття
+            remaining_hours[(group, subject, 'Lecture')] = lecture_hours
+            
+            # Ініціалізація для лабораторного заняття
+            remaining_hours[(group, subject, 'Lab')] = lab_hours
+
+
+    for day in schedule:
+        for slot in day:
+            for entry in slot:
+                
+                # Зменшуємо повні години, на години, прописані розкладом
+                if "." in entry['Group']:
+                    # Витягуємо інформацію про пару: група, предмет та тип заняття
+                    task_key = (entry['Group'].split('.')[0], entry['Subject'], entry['Type'])
+                    remaining_hours[task_key] -= 0.75 * NUM_OF_WEEKS
+                else:
+                    # Витягуємо інформацію про пару: група, предмет та тип заняття
+                    task_key = (entry['Group'], entry['Subject'], entry['Type'])
+                    remaining_hours[task_key] -= 1.5 * NUM_OF_WEEKS
+
+
+    return remaining_hours
 
 
 def genetic_algorithm_schedule(population_size, generations):
@@ -404,16 +448,10 @@ def genetic_algorithm_schedule(population_size, generations):
         new_population = []
         elite_count = int(0.1 * population_size)  # Елітарність: 10%
         new_population.extend(population[:elite_count])
-
-        _population = []
-        _score = []
-        for p, s in fitness_scores:
-            _population.append(p)
-            _score.append(s)
         
         while len(new_population) < population_size:
-            parent1 = select_parent([schedule for schedule, _ in _population], _score)
-            parent2 = select_parent([schedule for schedule, _ in _population], _score)
+            parent1 = select_parent([schedule for schedule, _ in population], [score for _, score in fitness_scores])
+            parent2 = select_parent([schedule for schedule, _ in population], [score for _, score in fitness_scores])
             
             # Створюємо нащадків, передаючи і schedule, і remaining_hours
             child1, child2 = crossover(parent1, parent2)
@@ -421,9 +459,14 @@ def genetic_algorithm_schedule(population_size, generations):
             # Мутація, яка змінює і schedule, і remaining_hours
             child1 = mutate(child1)
             child2 = mutate(child2)
+
+            # Пересчитываем remaining_hours для каждого потомка после мутации
+            child1_remaining_hours = calculate_remaining_hours(child1)
+            child2_remaining_hours = calculate_remaining_hours(child2)
             
             # Додаємо нових нащадків до нової популяції
-            new_population.extend([child1, child2])
+            new_population.extend([(child1, child1_remaining_hours), 
+                                (child2, child2_remaining_hours)])
         
         # Оновлюємо популяцію, обрізаємо зайві елементи
         population = new_population[:population_size]
@@ -441,5 +484,5 @@ subjects = load_subjects()
 lecturers = load_lecturers()
 rooms = load_rooms()
 
-print_schedule(genetic_algorithm_schedule(5, 10))
+print_schedule(genetic_algorithm_schedule(50, 100))
 # print_entity_schedule(initialize_schedule(groups, subjects, lecturers, rooms), "G1", "Group")
