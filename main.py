@@ -64,7 +64,8 @@ def print_schedule(schedule):
 
 def get_schedule_for_entity(schedule, entity, entity_type):
     """
-    Функція для отримання розкладу для заданого викладача, групи чи аудиторії.
+    Функція для отримання розкладу для заданого викладача, групи чи аудиторії, 
+    включаючи підгрупи для групи, якщо entity_type="Group".
     
     Args:
         schedule (list): Розклад у вигляді списку списків за слотами.
@@ -76,10 +77,17 @@ def get_schedule_for_entity(schedule, entity, entity_type):
     """
     filtered_schedule = []
 
+    # Якщо тип сутності — "Group", включаємо також підгрупи entity.1, entity.2 тощо
+    if entity_type == "Group":
+        group_entities = [entity, f"{entity}.1", f"{entity}.2"]
+    else:
+        group_entities = [entity]
+
     for day in range(DAYS_PER_WEEK):
         for time in range(SLOTS_PER_DAY):
             for entry in schedule[time][day]:
-                if entry[entity_type] == entity:
+                # Перевіряємо, чи група або інша сутність відповідає entity або одній із підгруп
+                if entry[entity_type] in group_entities:
                     filtered_schedule.append({
                         "Day": day + 1,
                         "Time": time + 1,
@@ -92,6 +100,7 @@ def get_schedule_for_entity(schedule, entity, entity_type):
 
     # Сортуємо розклад за днем і часом
     return sorted(filtered_schedule, key=lambda x: (x["Day"], x["Time"]))
+
 
 def print_entity_schedule(schedule, entity, entity_type):
     """
@@ -211,6 +220,8 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
 def fitness_function(schedule, remaining_hours):
     penalty = 0
 
+    #print_separate_gr_schedules(schedule)
+
     # Жорсткі обмеження
     
     # 1. Перевірка на конфлікти по викладачах
@@ -271,7 +282,7 @@ def fitness_function(schedule, remaining_hours):
     # 6. Перевірка залишкових годин
     for (group, subject, class_type), remaining in remaining_hours.items():
         if abs(remaining) > 0:
-            penalty += abs(remaining) * 2  # Штраф за незаповнені години
+            penalty += abs(remaining)  # Штраф за незаповнені години
 
     return penalty
 
@@ -302,7 +313,7 @@ def select_parent(population, fitness_scores):
 
 def crossover(parent1, parent2):
     """
-    Виконує двоточкове схрещування між двома батьками.
+    Виконує двоточкове схрещування між двома батьками на рівні окремих слотів.
     
     Parameters:
     - parent1: перший батьківський індивід (розклад).
@@ -311,17 +322,28 @@ def crossover(parent1, parent2):
     Returns:
     - child1, child2: два нащадки, створені в результаті схрещування.
     """
-    # Кількість генів в одному індивіді (розкладі) - 20, по одному на кожен слот тижня
-    num_slots = len(parent1)
-    
+    # Ініціалізація дітей як копій батьків, щоб мати основу для замін
+    child1 = [day.copy() for day in parent1]
+    child2 = [day.copy() for day in parent2]
+
     # Вибір двох точок для схрещування
-    point1, point2 = sorted(random.sample(range(num_slots), 2))
-    
-    # Створення дітей шляхом комбінування частин батьків
-    child1 = parent1[:point1] + parent2[point1:point2] + parent1[point2:]
-    child2 = parent2[:point1] + parent1[point1:point2] + parent2[point2:]
-    
+    point1_day, point1_slot = random.randint(0, DAYS_PER_WEEK - 1), random.randint(0, SLOTS_PER_DAY - 1)
+    point2_day, point2_slot = random.randint(0, DAYS_PER_WEEK - 1), random.randint(0, SLOTS_PER_DAY - 1)
+
+    # Гарантуємо, що point1 буде меншим за point2
+    if (point1_day, point1_slot) > (point2_day, point2_slot):
+        point1_day, point2_day = point2_day, point1_day
+        point1_slot, point2_slot = point2_slot, point1_slot
+
+    # Обмін парами між point1_day.point1_slot та point2_day.point2_slot для child1 і child2
+    for day in range(point1_day, point2_day + 1):
+        start_slot = point1_slot if day == point1_day else 0
+        end_slot = point2_slot if day == point2_day else SLOTS_PER_DAY - 1
+        for slot in range(start_slot, end_slot):
+            child1[slot][day], child2[slot][day] = child2[slot][day], child1[slot][day]
+
     return child1, child2
+
 
 def mutate(schedule, mutation_rate=0.1):
     """
@@ -338,12 +360,12 @@ def mutate(schedule, mutation_rate=0.1):
     mutated_schedule = schedule.copy()
     
     # Для кожного слоту розкладу розглядаємо можливість мутації
-    for day in range(len(mutated_schedule)):
-        for slot in range(len(mutated_schedule[day])):
+    for slot in range(len(mutated_schedule)):
+        for day in range(len(mutated_schedule[slot])):
             # Генеруємо випадкове число, щоб перевірити, чи відбудеться мутація
             if random.random() < mutation_rate:
                 # Отримуємо випадковий вибір для зміни параметра заняття
-                current_entry = mutated_schedule[day][slot]
+                current_entry = mutated_schedule[slot][day]
                 if current_entry == []:
                     continue
                 
@@ -375,12 +397,12 @@ def mutate(schedule, mutation_rate=0.1):
                 
                 elif mutation_choice == "time":
                     # Перемістити заняття на інший слот у той же день або інший день
-                    new_day = random.randint(0, len(mutated_schedule) - 1)
-                    new_slot = random.randint(0, len(mutated_schedule[new_day]) - 1)
+                    new_slot = random.randint(0, len(mutated_schedule) - 1)
+                    new_day = random.randint(0, len(mutated_schedule[new_slot]) - 1)
                     
                     # Переміщаємо заняття до нового слоту
-                    mutated_schedule[day][slot], mutated_schedule[new_day][new_slot] = \
-                    mutated_schedule[new_day][new_slot], mutated_schedule[day][slot]
+                    mutated_schedule[slot][day], mutated_schedule[new_slot][new_day] = \
+                    mutated_schedule[new_slot][new_day], mutated_schedule[slot][day]
     
     return mutated_schedule
 
@@ -419,10 +441,21 @@ def calculate_remaining_hours(schedule):
 
     return remaining_hours
 
+def print_separate_gr_schedules(schedule):
+    for G  in groups.keys():
+        print("---------------------------------------")
+        print_entity_schedule(schedule, G, "Group")
+        print("---------------------------------------")
+
+    
 
 def genetic_algorithm_schedule(population_size, generations):
     # Ініціалізуємо популяцію, де кожен індивід містить розклад та залишкові години
     population = [initialize_schedule(groups, subjects, lecturers, rooms) for _ in range(population_size)]
+
+    #print_separate_gr_schedules(population[0][0])
+    
+    
     
     for generation in range(generations):
         # Оцінка фітнесу для кожного індивіда
@@ -461,7 +494,7 @@ def genetic_algorithm_schedule(population_size, generations):
             child1 = mutate(child1)
             child2 = mutate(child2)
 
-            # Пересчитываем remaining_hours для каждого потомка после мутации
+            # Перераховуємо remaining_hours для кожного нащадка після мутації
             child1_remaining_hours = calculate_remaining_hours(child1)
             child2_remaining_hours = calculate_remaining_hours(child2)
             
@@ -474,7 +507,8 @@ def genetic_algorithm_schedule(population_size, generations):
     
     # Повертаємо найкращий розклад після завершення всіх поколінь
     best_schedule, _ = population[0]  # Беремо розклад з найменшим фітнесом
-    #print_schedule(best_schedule)
+    #print_separate_gr_schedules(best_schedule)
+    #print(fitness_scores[0][0][1])
     return best_schedule
 
 
@@ -485,5 +519,6 @@ subjects = load_subjects()
 lecturers = load_lecturers()
 rooms = load_rooms()
 
-print_schedule(genetic_algorithm_schedule(100, 1000))
-# print_entity_schedule(initialize_schedule(groups, subjects, lecturers, rooms), "G1", "Group")
+schedule = genetic_algorithm_schedule(50, 100)
+print_separate_gr_schedules(schedule)
+#print_schedule(schedule)
