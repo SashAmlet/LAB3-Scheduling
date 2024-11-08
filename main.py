@@ -435,7 +435,7 @@ def genetic_algorithm_schedule(population_size, generations):
         fitness_scores.sort(key=lambda x: x[1])
         
         # Оновлюємо популяцію, залишаючи тільки розклади
-        population = [x[0] for x in fitness_scores]
+        population = [x[0] for x in fitness_scores[:population_size]]
         
         # Перевірка умови зупинки
         if fitness_scores[0][1] == 0:  # Якщо фітнес без штрафів (ідеальне рішення)
@@ -469,7 +469,7 @@ def genetic_algorithm_schedule(population_size, generations):
                                 (child2, child2_remaining_hours)])
         
         # Оновлюємо популяцію, обрізаємо зайві елементи
-        population = new_population[:population_size]
+        population.extend(new_population)
     
     # Повертаємо найкращий розклад після завершення всіх поколінь
     best_schedule, _ = population[0]  # Беремо розклад з найменшим фітнесом
