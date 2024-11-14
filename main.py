@@ -219,47 +219,17 @@ def initialize_schedule(groups, subjects, lecturers, rooms):
 
 def fitness_function(schedule, remaining_hours):
     penalty = 0
-
-    #print_separate_gr_schedules(schedule)
-
-    # Жорсткі обмеження
+    # М'які обмеження
     
-    # 1. Перевірка на конфлікти по викладачах
-    lecturer_slots = {}
-    for day in range(DAYS_PER_WEEK):
-        for slot in range(SLOTS_PER_DAY):
-            for entry in schedule[slot][day]:
-                lecturer = entry['Lecturer']
-                if (day, slot) in lecturer_slots.get(lecturer, []):
-                    penalty += 100  # Штраф за конфлікт у викладача
-                else:
-                    lecturer_slots.setdefault(lecturer, []).append((day, slot))
-
-    # 2. Перевірка на конфлікти по групах
+    # 4. Мінімізація "вікон" для груп
+    # Формуємо розклад занять кожної групи
     group_slots = {}
     for day in range(DAYS_PER_WEEK):
         for slot in range(SLOTS_PER_DAY):
             for entry in schedule[slot][day]:
                 group = entry['Group'].split('.')[0]
-                if (day, slot) in group_slots.get(group, []):
-                    penalty += 100  # Штраф за конфлікт у групи
-                else:
-                    group_slots.setdefault(group, []).append((day, slot))
+                group_slots.setdefault(group, []).append((day, slot))
 
-    # 3. Перевірка на конфлікти по аудиторіях
-    room_slots = {}
-    for day in range(DAYS_PER_WEEK):
-        for slot in range(SLOTS_PER_DAY):
-            for entry in schedule[slot][day]:
-                room = entry['Room']
-                if (day, slot) in room_slots.get(room, []):
-                    penalty += 100  # Штраф за конфлікт в аудиторії
-                else:
-                    room_slots.setdefault(room, []).append((day, slot))
-
-    # М'які обмеження
-    
-    # 4. Мінімізація "вікон" для груп
     for group, slots in group_slots.items():
         slots.sort()
         for i in range(1, len(slots)):
@@ -370,33 +340,41 @@ def mutate(schedule, mutation_rate=0.1):
                     continue
                 
                 # Вибираємо тип зміни: змінити предмет, викладача, аудиторію або час
-                mutation_choice = "time" #random.choice(["subject", "lecturer", "room", "time"])
+                mutation_choice = "room" #random.choice(["subject", "lecturer", "room", "time"])
                 random_index = random.randint(0, len(current_entry)-1)
                 
                 if mutation_choice == "subject":
                     # Змінити предмет на інший випадковий із переліку доступних предметів
-                    # Збираємо всі предмети зі структури `subjects`
-                    all_subjects = set()
-                    for group_subjects in subjects.values():
-                        for entry in group_subjects:
-                            all_subjects.add(entry["Subject"])
+                    
+                    lecturer = current_entry[random_index]["Lecturer"]
+                    # Вибираємо довільний предмет, який веде цей викладач
+                    possible_subjects = list(lecturers.get(lecturer, {}).keys())
 
-                    current_entry[random_index]["Subject"] = random.choice(list(all_subjects))
+                    random_subject = random.choice(list(possible_subjects))
+                    current_entry[random_index]["Subject"] = random_subject
                 
                 elif mutation_choice == "lecturer":
                     # Змінити викладача на іншого, який може викладати цей предмет
                     possible_lecturers = [lect for lect, details in lecturers.items() 
                                           if current_entry[random_index]["Subject"] in details.keys()]
-                    current_entry[random_index]["Lecturer"] = random.choice(possible_lecturers)
+                    random_lecturer = random.choice(possible_lecturers)
+                    # Чи відповідає вибраний лектор жорстким умовам?
+                    busy_lecturers = [entry["Lecturer"] for entry in current_entry]
+                    if random_lecturer not in busy_lecturers:
+                        current_entry[random_index]["Lecturer"] = random_lecturer
                 
                 elif mutation_choice == "room":
                     # Змінити аудиторію на іншу, яка може вмістити групу
                     group_size = current_entry[random_index]["NumOfStudents"]
                     possible_rooms = [room['Room'] for room in rooms if room['Capacity'] >= group_size]
-                    current_entry[random_index]["Room"] = random.choice(possible_rooms)
+                    random_room = random.choice(possible_rooms)
+                    # Чи відповідає вибрана аудиторія жорстким умовам?
+                    busy_rooms = [entry["Room"] for entry in current_entry]
+                    if random_room not in busy_rooms:
+                        current_entry[random_index]["Room"] = random_room
                 
                 elif mutation_choice == "time":
-                    # Перемістити заняття на інший слот у той же день або інший день
+                    # Перемістити заняття на інший слот у той або інший день
                     new_slot = random.randint(0, len(mutated_schedule) - 1)
                     new_day = random.randint(0, len(mutated_schedule[new_slot]) - 1)
                     
@@ -519,6 +497,7 @@ subjects = load_subjects()
 lecturers = load_lecturers()
 rooms = load_rooms()
 
-schedule = genetic_algorithm_schedule(50, 100)
+schedule = genetic_algorithm_schedule(100, 200)
 print_separate_gr_schedules(schedule)
-#print_schedule(schedule)
+print_schedule(schedule)
+# print_entity_schedule(schedule, "Lecturer_2", "Lecturer")

@@ -4,7 +4,7 @@ from collections import defaultdict
 
 NUM_OF_GROUPS = 4
 NUM_OF_CLASSES = 6
-NUM_OF_LECTURERS = 8
+NUM_OF_LECTURERS = 15
 NUM_OF_ROOMS = 20
 
 # Генерація списку груп
