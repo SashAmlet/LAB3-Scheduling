@@ -24,8 +24,8 @@ with open("subjects.csv", "w", newline="") as file:
         group_name = f"G{i+1}"
         for j in range(NUM_OF_CLASSES):
             subject = f"Subject_{j+1}"
-            lecture_hours = random.randint(10, 20)
-            lab_hours = random.randint(5, 15)
+            lecture_hours = random.randint(8, 30)
+            lab_hours = random.randint(8, 30)
             needs_division = "Yes" if random.choice([True, False]) else "No"
             writer.writerow([group_name, subject, lecture_hours, lab_hours, needs_division])
 

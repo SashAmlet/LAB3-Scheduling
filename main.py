@@ -155,7 +155,6 @@ def room_capacity_exceeded(group, room):
         return True
     return False
 
-
 def cost(assignment):
     total_cost = 0
     # Нежорсткі обмеження
@@ -235,23 +234,27 @@ for subj in subjects:
     lab_hours = int(subj['LabHours'])
     needs_division = subj['NeedsDivision'] == "Yes"
 
-    # Лекції
-    variables.append((group, subject, 'Lecture'))
-    domains[(group, subject, 'Lecture')] = [
-        (room, lecturer, day, time_slot)
-        for room in room_map
-        for lecturer in lecturer_map.get((subject, 'Lecture'), [])
-        for day in days
-        for time_slot in time_slots
-    ]
 
+    weekly_lecture_hours = lecture_hours // NUM_OF_WEEKS  
+    # Лекції
+    for i in range(weekly_lecture_hours):
+        variables.append((group, subject, f'Lecture_{i}'))
+        domains[(group, subject, f'Lecture_{i}')] = [
+            (room, lecturer, day, time_slot)
+            for room in room_map
+            for lecturer in lecturer_map.get((subject, 'Lecture'), [])
+            for day in days
+            for time_slot in time_slots
+        ]
+
+    weekly_lab_hours = lab_hours // NUM_OF_WEEKS
     # Лабораторні
-    if lab_hours > 0:
+    for i in range(weekly_lab_hours):
         if needs_division:
             # Створення змінних для підгруп
             for subgroup in [f"{group}.1", f"{group}.2"]:
-                variables.append((subgroup, subject, 'Lab'))
-                domains[(subgroup, subject, 'Lab')] = [
+                variables.append((subgroup, subject, f'Lab_{i}'))
+                domains[(subgroup, subject, f'Lab_{i}')] = [
                     (room, lecturer, day, time_slot)
                     for room in room_map
                     for lecturer in lecturer_map.get((subject, 'Lab'), [])
@@ -260,8 +263,8 @@ for subj in subjects:
                 ]
         else:
             # Без поділу на підгрупи
-            variables.append((group, subject, 'Lab'))
-            domains[(group, subject, 'Lab')] = [
+            variables.append((group, subject, f'Lab_{i}'))
+            domains[(group, subject, f'Lab_{i}')] = [
                 (room, lecturer, day, time_slot)
                 for room in room_map
                 for lecturer in lecturer_map.get((subject, 'Lab'), [])
